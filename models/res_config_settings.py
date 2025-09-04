@@ -5,6 +5,7 @@ class ResConfigSettings(models.TransientModel):
     _inherit = "res.config.settings"
 
     eventbrite_api_token = fields.Char(string="Eventbrite API Token")
+    eventbrite_location = fields.Char(string="Search Location", default="New York", help="Enter city name to search for events (e.g., New York, Los Angeles, London)")
     eventbrite_org_id = fields.Char(string="Eventbrite Organization ID")
     eventbrite_search_mode = fields.Selection(
         [
@@ -29,6 +30,7 @@ class ResConfigSettings(models.TransientModel):
         res = super().set_values()
         ICP = self.env["ir.config_parameter"].sudo()
         ICP.set_param("eventbrite.api_token", self.eventbrite_api_token or "")
+        ICP.set_param("eventbrite.location_address", self.eventbrite_location or "New York")
         ICP.set_param("eventbrite.org_id", self.eventbrite_org_id or "")
         ICP.set_param("eventbrite.search_mode", self.eventbrite_search_mode)
         ICP.set_param("eventbrite.location_address", self.eventbrite_location_address or "")
@@ -45,6 +47,7 @@ class ResConfigSettings(models.TransientModel):
         ICP = self.env["ir.config_parameter"].sudo()
         res.update(
             eventbrite_api_token=ICP.get_param("eventbrite.api_token", ""),
+            eventbrite_location=ICP.get_param("eventbrite.location_address", "New York"),
             eventbrite_org_id=ICP.get_param("eventbrite.org_id", ""),
             eventbrite_search_mode=ICP.get_param("eventbrite.search_mode", "org"),
             eventbrite_location_address=ICP.get_param("eventbrite.location_address", ""),

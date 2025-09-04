@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <!-- Show EB fields in backend for reference -->
+  <record id="view_event_form_eventbrite_minimal" model="ir.ui.view">
+    <field name="name">event.event.form.eventbrite.minimal</field>
+    <field name="model">event.event</field>
+    <field name="inherit_id" ref="event.view_event_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//sheet/notebook" position="inside">
+        <page string="Eventbrite">
+          <group>
+            <field name="eventbrite_id" readonly="1"/>
+            <field name="eventbrite_status" readonly="1"/>
+            <field name="external_url"/>
+            <field name="eventbrite_changed" readonly="1"/>
+            <field name="last_synced_at" readonly="1"/>
+          </group>
+        </page>
+      </xpath>
+    </field>
+  </record>
+</odoo>
+
+

@@ -45,7 +45,7 @@ class EventbriteSync(models.TransientModel):
 
     # -------------- Simple Fetch (Auto-detect org) --------------
     def _fetch_all_events_simple(self):
-        """Simple fetch that auto-detects organization ID from token"""
+        """Simple fetch that searches for events using location-based search"""
         ICP = self.env["ir.config_parameter"].sudo()
         token = ICP.get_param("eventbrite.api_token")
         if not token:
@@ -54,34 +54,48 @@ class EventbriteSync(models.TransientModel):
         headers = {"Authorization": f"Bearer {token}"}
         
         try:
-            # First, get user info to find organization ID
+            # First, get user info to verify token
             user_resp = requests.get(f"{EVENTBRITE_API}/users/me/", headers=headers, timeout=30)
             self._rate_limit_guard(user_resp)
             user_data = user_resp.json()
+            user_name = user_data.get("name", "User")
             
-            # Get organizations for this user
-            orgs_resp = requests.get(f"{EVENTBRITE_API}/users/me/organizations/", headers=headers, timeout=30)
-            self._rate_limit_guard(orgs_resp)
-            orgs_data = orgs_resp.json()
+            # Try to get organizations first
+            try:
+                orgs_resp = requests.get(f"{EVENTBRITE_API}/users/me/organizations/", headers=headers, timeout=30)
+                self._rate_limit_guard(orgs_resp)
+                orgs_data = orgs_resp.json()
+                
+                if orgs_data.get("organizations"):
+                    # Use organization mode if available
+                    org_id = orgs_data["organizations"][0]["id"]
+                    org_name = orgs_data["organizations"][0]["name"]
+                    
+                    ICP.set_param("eventbrite.org_id", org_id)
+                    ICP.set_param("eventbrite.search_mode", "org")
+                    
+                    now = datetime.now(timezone.utc)
+                    end_dt = now + timedelta(days=60)
+                    events = self._fetch_org_events(headers, org_id, start_after=now, end_before=end_dt)
+                    source = f"organization '{org_name}'"
+                else:
+                    raise Exception("No organizations found")
+                    
+            except Exception:
+                # Fall back to search mode - search for events globally
+                _logger.info("No organizations found, using search mode")
+                ICP.set_param("eventbrite.search_mode", "search")
+                ICP.set_param("eventbrite.location_address", "")
+                ICP.set_param("eventbrite.location_within", "100km")
+                
+                now = datetime.now(timezone.utc)
+                end_dt = now + timedelta(days=60)
+                events = self._search_events(headers, "", "100km", start=now, end=end_dt)
+                source = "global search"
             
-            if not orgs_data.get("organizations"):
-                return "Error: No organizations found for this token. Please check your Eventbrite account."
-            
-            # Use the first organization
-            org_id = orgs_data["organizations"][0]["id"]
-            org_name = orgs_data["organizations"][0]["name"]
-            
-            # Store the org ID for future use
-            ICP.set_param("eventbrite.org_id", org_id)
-            ICP.set_param("eventbrite.search_mode", "org")
+            # Store settings for future use
             ICP.set_param("eventbrite.auto_publish", "1")
             ICP.set_param("eventbrite.restrict_only_api_events", "1")
-            
-            # Now fetch events from this organization
-            now = datetime.now(timezone.utc)
-            end_dt = now + timedelta(days=60)  # Next 60 days
-            
-            events = self._fetch_org_events(headers, org_id, start_after=now, end_before=end_dt)
             
             created, updated, skipped = 0, 0, 0
             for ev in events:
@@ -97,7 +111,7 @@ class EventbriteSync(models.TransientModel):
             # Unpublish non-Eventbrite events
             self._unpublish_non_eventbrite_events(False)
             
-            return f"Success! Found {len(events)} events from '{org_name}'. Created: {created}, Updated: {updated}, Skipped: {skipped}"
+            return f"Success! Found {len(events)} events from {source}. Created: {created}, Updated: {updated}, Skipped: {skipped}"
             
         except Exception as e:
             _logger.exception("Error in simple fetch")

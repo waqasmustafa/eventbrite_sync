@@ -131,8 +131,7 @@ class NYCEventsSync(models.TransientModel):
                 "city": "New York",
                 "countryCode": "US",
                 "size": size,
-                "page": page,
-                "sort": "date,asc"
+                "page": page
             }
             
             url = f"{TICKETMASTER_API}/events.json"
@@ -256,6 +255,9 @@ class NYCEventsSync(models.TransientModel):
             _logger.warning("Ticketmaster 429 rate limited; sleeping 5s...")
             time.sleep(5)
             return
+        if resp.status_code == 400:
+            _logger.error("Ticketmaster 400 Bad Request. Response: %s", resp.text)
+            raise requests.exceptions.HTTPError(f"400 Bad Request: {resp.text}")
         resp.raise_for_status()
 
     def _parse_ticketmaster_date(self, date_str):

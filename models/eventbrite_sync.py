@@ -294,75 +294,13 @@ class EventbriteSync(models.TransientModel):
         except Exception as e:
             _logger.warning("Failed to get user information: %s", str(e))
         
-        # If we still don't have events, let's try a different approach
-        # We'll create realistic events that represent what you'd find on Eventbrite
+        # If we still don't have events, log the issue for future solution
         if not events:
-            _logger.info("No events found from API, creating realistic events from popular categories")
-            # Create realistic events from different categories that you'd find on Eventbrite
-            realistic_events = [
-                {
-                    "id": "music_001",
-                    "name": {"text": "Live Music Concert - Jazz Night"},
-                    "start": {"local": "2025-09-15T19:00:00", "timezone": "America/New_York"},
-                    "end": {"local": "2025-09-15T22:00:00", "timezone": "America/New_York"},
-                    "status": "live",
-                    "url": "https://www.eventbrite.com/e/jazz-night-concert-tickets-123456789",
-                    "venue": {"name": "Blue Note Jazz Club", "address": {"city": "New York", "address_1": "131 W 3rd St"}},
-                    "logo": {"url": "https://via.placeholder.com/300x200/8B0000/ffffff?text=Jazz+Night"}
-                },
-                {
-                    "id": "tech_002", 
-                    "name": {"text": "Tech Meetup - AI & Machine Learning"},
-                    "start": {"local": "2025-09-18T18:30:00", "timezone": "America/New_York"},
-                    "end": {"local": "2025-09-18T21:00:00", "timezone": "America/New_York"},
-                    "status": "live",
-                    "url": "https://www.eventbrite.com/e/ai-ml-tech-meetup-tickets-234567890",
-                    "venue": {"name": "Tech Hub NYC", "address": {"city": "New York", "address_1": "500 7th Ave"}},
-                    "logo": {"url": "https://via.placeholder.com/300x200/0066cc/ffffff?text=AI+Meetup"}
-                },
-                {
-                    "id": "food_003",
-                    "name": {"text": "Food & Wine Tasting Event"},
-                    "start": {"local": "2025-09-20T17:00:00", "timezone": "America/New_York"},
-                    "end": {"local": "2025-09-20T20:00:00", "timezone": "America/New_York"},
-                    "status": "live",
-                    "url": "https://www.eventbrite.com/e/food-wine-tasting-tickets-345678901",
-                    "venue": {"name": "Culinary Institute", "address": {"city": "New York", "address_1": "1946 Broadway"}},
-                    "logo": {"url": "https://via.placeholder.com/300x200/cc6600/ffffff?text=Food+Wine"}
-                },
-                {
-                    "id": "art_004",
-                    "name": {"text": "Art Exhibition - Modern Artists"},
-                    "start": {"local": "2025-09-22T10:00:00", "timezone": "America/New_York"},
-                    "end": {"local": "2025-09-22T18:00:00", "timezone": "America/New_York"},
-                    "status": "live",
-                    "url": "https://www.eventbrite.com/e/modern-art-exhibition-tickets-456789012",
-                    "venue": {"name": "Museum of Modern Art", "address": {"city": "New York", "address_1": "11 W 53rd St"}},
-                    "logo": {"url": "https://via.placeholder.com/300x200/9932cc/ffffff?text=Art+Exhibition"}
-                },
-                {
-                    "id": "fitness_005",
-                    "name": {"text": "Yoga & Wellness Workshop"},
-                    "start": {"local": "2025-09-25T09:00:00", "timezone": "America/New_York"},
-                    "end": {"local": "2025-09-25T12:00:00", "timezone": "America/New_York"},
-                    "status": "live",
-                    "url": "https://www.eventbrite.com/e/yoga-wellness-workshop-tickets-567890123",
-                    "venue": {"name": "Wellness Center", "address": {"city": "New York", "address_1": "789 Park Ave"}},
-                    "logo": {"url": "https://via.placeholder.com/300x200/228b22/ffffff?text=Yoga+Workshop"}
-                },
-                {
-                    "id": "business_006",
-                    "name": {"text": "Startup Networking Event"},
-                    "start": {"local": "2025-09-28T18:00:00", "timezone": "America/New_York"},
-                    "end": {"local": "2025-09-28T21:30:00", "timezone": "America/New_York"},
-                    "status": "live",
-                    "url": "https://www.eventbrite.com/e/startup-networking-tickets-678901234",
-                    "venue": {"name": "Innovation Hub", "address": {"city": "New York", "address_1": "100 Broadway"}},
-                    "logo": {"url": "https://via.placeholder.com/300x200/ff4500/ffffff?text=Startup+Event"}
-                }
-            ]
-            events.extend(realistic_events)
-            _logger.info("Created %s realistic events from popular categories", len(realistic_events))
+            _logger.warning("No events found from Eventbrite API. This is expected because:")
+            _logger.warning("1. Eventbrite API doesn't provide public events search")
+            _logger.warning("2. Need specific organization IDs to get events")
+            _logger.warning("3. User doesn't have any organizations")
+            _logger.warning("4. Need to implement alternative solution for public events")
         
         _logger.info("Final events count: %s", len(events))
         return events[:20]  # Return max 20 events

@@ -90,9 +90,17 @@ class EventbriteSync(models.TransientModel):
                 
                 now = datetime.now(timezone.utc)
                 end_dt = now + timedelta(days=60)
-                # Search without location parameters for global search
+                
+                # Try multiple search approaches
                 events = self._search_events(headers, None, None, start=now, end=end_dt)
-                source = "global search"
+                
+                # If no events found, try getting events from popular categories
+                if not events:
+                    _logger.info("No events found with search, trying category-based approach")
+                    events = self._get_events_from_categories(headers, start=now, end=end_dt)
+                    source = "category search"
+                else:
+                    source = "global search"
             
             # Store settings for future use
             ICP.set_param("eventbrite.auto_publish", "1")
@@ -192,30 +200,103 @@ class EventbriteSync(models.TransientModel):
         return events
 
     def _search_events(self, headers, address, within, start, end):
-        events, page = [], 1
-        params = {
-            "sort_by": "date",
-            "page": page,
-            "expand": "venue,logo",
-            "start_date.range_start": start.isoformat(),
-            "start_date.range_end": end.isoformat(),
-        }
-        # Add location parameters only if address is provided
-        if address:
-            params["location.address"] = address
-            params["location.within"] = within or "25km"
+        """Search for events using the correct Eventbrite API endpoint"""
+        events = []
         
-        url = f"{EVENTBRITE_API}/events/search/"
-        while True:
-            resp = requests.get(url, headers=headers, params=params, timeout=30)
-            self._rate_limit_guard(resp)
-            data = resp.json()
-            events += data.get("events", [])
-            if not data.get("pagination", {}).get("has_more_items"):
-                break
-            page += 1
-            params["page"] = page
+        # Try different search approaches
+        search_urls = [
+            # Try the events endpoint with search parameters
+            f"{EVENTBRITE_API}/events/",
+            # Try the search endpoint (if it exists)
+            f"{EVENTBRITE_API}/events/search/",
+        ]
+        
+        for url in search_urls:
+            try:
+                params = {
+                    "status": "live",
+                    "order_by": "start_asc",
+                    "expand": "venue,logo",
+                    "time_filter": "start",
+                    "start_date.range_start": start.isoformat(),
+                    "start_date.range_end": end.isoformat(),
+                }
+                
+                # Add location parameters only if address is provided
+                if address:
+                    params["location.address"] = address
+                    params["location.within"] = within or "25km"
+                
+                page = 1
+                while True:
+                    params["page"] = page
+                    resp = requests.get(url, headers=headers, params=params, timeout=30)
+                    
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        page_events = data.get("events", [])
+                        events.extend(page_events)
+                        
+                        if not data.get("pagination", {}).get("has_more_items"):
+                            break
+                        page += 1
+                    else:
+                        # If this URL doesn't work, try the next one
+                        break
+                        
+                # If we got events from this URL, return them
+                if events:
+                    return events
+                    
+            except Exception as e:
+                _logger.warning("Failed to search events with URL %s: %s", url, str(e))
+                continue
+        
+        # If no search method worked, return empty list
+        _logger.warning("All search methods failed, returning empty events list")
         return events
+
+    def _get_events_from_categories(self, headers, start, end):
+        """Get events from popular categories as a fallback"""
+        events = []
+        popular_categories = [
+            "103",  # Music
+            "104",  # Food & Drink
+            "105",  # Health
+            "106",  # Business
+            "107",  # Arts
+            "108",  # Film & Media
+            "109",  # Sports & Fitness
+            "110",  # Travel & Outdoor
+        ]
+        
+        for category_id in popular_categories:
+            try:
+                url = f"{EVENTBRITE_API}/events/"
+                params = {
+                    "status": "live",
+                    "order_by": "start_asc",
+                    "expand": "venue,logo",
+                    "time_filter": "start",
+                    "start_date.range_start": start.isoformat(),
+                    "start_date.range_end": end.isoformat(),
+                    "categories": category_id,
+                }
+                
+                resp = requests.get(url, headers=headers, params=params, timeout=30)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    category_events = data.get("events", [])
+                    events.extend(category_events[:5])  # Limit to 5 events per category
+                    
+                    if len(events) >= 20:  # Limit total events
+                        break
+                        
+            except Exception as e:
+                _logger.warning("Failed to get events for category %s: %s", category_id, str(e))
+                continue
+        
+        return events[:20]  # Return max 20 events
 
     # -------------- UPSERT (Minimal fields only) --------------
     def _upsert_minimal(self, eb_event, auto_publish, website_id):

@@ -1,114 +1,97 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-
-  <!-- DETAIL PAGE: Replace register button with external link if present -->
-  <template id="event_event_register_btn_minimal" inherit_id="website_event.event_event">
-    <!-- Replace any native register link -->
-    <xpath expr="//a[contains(@href, '/register')]" position="replace">
-      <t t-if="event.external_url">
-        <a t-att-href="event.external_url" class="btn btn-primary" target="_blank" rel="noopener">
-          View on Eventbrite
-        </a>
-      </t>
-      <t t-else="">
-        <a t-att-href="'/event/%s/register' % event.id" class="btn btn-primary">Register</a>
-      </t>
-    </xpath>
-
-    <!-- Hide default sections we don't want (description, agenda, speakers, etc.) -->
-    <xpath expr="//div[contains(@class,'o_wevent_event_description')]" position="attributes">
-      <attribute name="style">display:none;</attribute>
-    </xpath>
-    <xpath expr="//section[contains(@class,'s_share')] | //div[contains(@class,'o_wevent_event_tickets')]" position="attributes">
-      <attribute name="style">display:none;</attribute>
-    </xpath>
-
-    <!-- Build a minimal block near the header to show only Image + Time + Location + CTA -->
-    <xpath expr="//div[contains(@class,'o_wevent_event_header')]" position="after">
-      <section class="oe_structure mt-3 mb-4">
-        <div class="container">
-          <div class="row align-items-center">
-            <div class="col-12 col-md-5 mb-3 mb-md-0">
-              <img t-att-src="website.image_url(event, 'image_1920')" alt="Event" class="img-fluid rounded"/>
+  <!-- Simple website templates for Eventbrite events -->
+  <!-- These templates will be applied when events have external_url field -->
+  
+  <!-- Custom event detail page for Eventbrite events -->
+  <template id="eventbrite_event_detail" name="Eventbrite Event Detail">
+    <t t-call="web.layout">
+      <t t-set="title" t-value="event.name"/>
+      <div class="container mt-4">
+        <div class="row">
+          <div class="col-12">
+            <h1 t-esc="event.name"/>
+            <div class="row mt-4">
+              <div class="col-12 col-md-6">
+                <img t-att-src="website.image_url(event, 'image_1920')" 
+                     alt="Event" class="img-fluid rounded mb-3"/>
+              </div>
+              <div class="col-12 col-md-6">
+                <div class="mb-3">
+                  <strong>Date &amp; Time:</strong><br/>
+                  <t t-if="event.date_begin">
+                    <span t-esc="format_datetime(event.date_begin, tz=website.get_current_website().timezone, dt_format='EEE, d MMM yyyy • HH:mm')"/>
+                  </t>
+                  <t t-if="event.date_end">
+                    <span> – </span>
+                    <span t-esc="format_datetime(event.date_end, tz=website.get_current_website().timezone, dt_format='HH:mm')"/>
+                  </t>
+                </div>
+                <div class="mb-3">
+                  <strong>Location:</strong><br/>
+                  <t t-if="event.address_id">
+                    <span t-esc="event.address_id.name"/>
+                    <t t-if="event.address_id.city">, <span t-esc="event.address_id.city"/></t>
+                  </t>
+                  <t t-else="">Online / TBA</t>
+                </div>
+                <t t-if="event.external_url">
+                  <a t-att-href="event.external_url" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
+                    View on Eventbrite
+                  </a>
+                </t>
+              </div>
             </div>
-            <div class="col-12 col-md-7">
-              <div class="mb-2">
-                <strong>Date &amp; Time:</strong>
-                <t t-if="event.date_begin">
-                  <span t-esc="format_datetime(event.date_begin, tz=website.get_current_website().timezone, dt_format='EEE, d MMM yyyy • HH:mm')"/>
-                </t>
-                <t t-if="event.date_end">
-                  <span> – </span>
-                  <span t-esc="format_datetime(event.date_end, tz=website.get_current_website().timezone, dt_format='HH:mm')"/>
-                </t>
-              </div>
-              <div class="mb-3">
-                <strong>Location:</strong>
-                <t t-if="event.address_id">
-                  <span t-esc="event.address_id.name"/>
-                  <t t-if="event.address_id.city">, <span t-esc="event.address_id.city"/></t>
-                </t>
-                <t t-else="">Online / TBA</t>
-              </div>
-              <t t-if="event.external_url">
-                <a t-att-href="event.external_url" class="btn btn-primary" target="_blank" rel="noopener">
-                  View on Eventbrite
-                </a>
+          </div>
+        </div>
+      </div>
+    </t>
+  </template>
+
+  <!-- Custom event listing page for Eventbrite events -->
+  <template id="eventbrite_events_list" name="Eventbrite Events List">
+    <t t-call="web.layout">
+      <t t-set="title">Events</t>
+      <div class="container mt-4">
+        <div class="row">
+          <div class="col-12">
+            <h1>Events</h1>
+            <div class="row">
+              <t t-foreach="events" t-as="event">
+                <div class="col-12 col-md-6 col-lg-4 mb-4">
+                  <div class="card h-100 shadow-sm">
+                    <img t-att-src="website.image_url(event, 'image_1920')" 
+                         class="card-img-top" alt="Event"/>
+                    <div class="card-body">
+                      <h5 class="card-title" t-esc="event.name"/>
+                      <div class="mb-2">
+                        <strong>Date &amp; Time:</strong><br/>
+                        <t t-if="event.date_begin">
+                          <span t-esc="format_datetime(event.date_begin, tz=website.get_current_website().timezone, dt_format='EEE, d MMM • HH:mm')"/>
+                        </t>
+                      </div>
+                      <div class="mb-3">
+                        <strong>Location:</strong><br/>
+                        <t t-if="event.address_id">
+                          <span t-esc="event.address_id.name"/>
+                          <t t-if="event.address_id.city">, <span t-esc="event.address_id.city"/></t>
+                        </t>
+                        <t t-else="">Online / TBA</t>
+                      </div>
+                      <t t-if="event.external_url">
+                        <a t-att-href="event.external_url" class="btn btn-primary" target="_blank" rel="noopener">
+                          View on Eventbrite
+                        </a>
+                      </t>
+                    </div>
+                  </div>
+                </div>
               </t>
             </div>
           </div>
         </div>
-      </section>
-    </xpath>
-  </template>
-
-  <!-- LISTING PAGE: Minimal card (Image + Time + Location + CTA). 
-       We override the list item block to simplify presentation. -->
-  <template id="events_minimal_list_cards" inherit_id="website_event.events">
-    <!-- Hide default search extras if you want even cleaner UI (optional) -->
-    <xpath expr="//div[contains(@class,'o_wevent_events_search')]" position="attributes">
-      <attribute name="style">display:none;</attribute>
-    </xpath>
-
-    <!-- Replace each card content -->
-    <xpath expr="//div[contains(@class,'o_wevent_events_grid')]" position="inside">
-      <t t-foreach="events" t-as="event">
-        <div class="col-12 col-md-6 col-lg-4 mb-4">
-          <div class="card h-100 shadow-sm">
-            <img t-att-src="website.image_url(event, 'image_1920')" class="card-img-top" alt="Event"/>
-            <div class="card-body">
-              <!-- Time -->
-              <div class="mb-1">
-                <strong>Date &amp; Time:</strong>
-                <t t-if="event.date_begin">
-                  <span t-esc="format_datetime(event.date_begin, tz=website.get_current_website().timezone, dt_format='EEE, d MMM • HH:mm')"/>
-                </t>
-              </div>
-              <!-- Location -->
-              <div class="mb-3">
-                <strong>Location:</strong>
-                <t t-if="event.address_id">
-                  <span t-esc="event.address_id.name"/>
-                  <t t-if="event.address_id.city">, <span t-esc="event.address_id.city"/></t>
-                </t>
-                <t t-else="">Online / TBA</t>
-              </div>
-              <!-- CTA -->
-              <t t-if="event.external_url">
-                <a t-att-href="event.external_url" class="btn btn-primary" target="_blank" rel="noopener">View on Eventbrite</a>
-              </t>
-            </div>
-          </div>
-        </div>
-      </t>
-    </xpath>
-  </template>
-
-  <!-- Ensure native register snippets/buttons elsewhere are hidden -->
-  <template id="hide_other_register_buttons" inherit_id="website_event.event_registration">
-    <xpath expr="//a[contains(@href, '/register')]" position="attributes">
-      <attribute name="style">display:none;</attribute>
-    </xpath>
+      </div>
+    </t>
   </template>
 
 </odoo>

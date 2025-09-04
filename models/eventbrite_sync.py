@@ -45,53 +45,18 @@ class EventbriteSync(models.TransientModel):
 
     # -------------- Simple Fetch (Auto-detect org) --------------
     def _fetch_all_events_simple(self):
-        """Simple fetch that searches for events using location-based search"""
+        """Simple fetch that scrapes events directly from Eventbrite website - NO API NEEDED!"""
         ICP = self.env["ir.config_parameter"].sudo()
-        token = ICP.get_param("eventbrite.api_token")
-        if not token:
-            return "Error: No API token found. Please enter your Eventbrite API token first."
-
-        headers = {"Authorization": f"Bearer {token}"}
+        location = ICP.get_param("eventbrite.location_address", "New York")
+        
+        _logger.info("Fetching events for location: %s (using web scraping - no API needed!)", location)
         
         try:
-            # First, get user info to verify token
-            user_resp = requests.get(f"{EVENTBRITE_API}/users/me/", headers=headers, timeout=30)
-            self._rate_limit_guard(user_resp)
-            user_data = user_resp.json()
-            user_name = user_data.get("name", "User")
+            # Direct web scraping - no API token needed!
+            events = self._scrape_events_from_website(location)
             
-            # Try to get organizations first
-            try:
-                orgs_resp = requests.get(f"{EVENTBRITE_API}/users/me/organizations/", headers=headers, timeout=30)
-                self._rate_limit_guard(orgs_resp)
-                orgs_data = orgs_resp.json()
-                
-                if orgs_data.get("organizations"):
-                    # Use organization mode if available
-                    org_id = orgs_data["organizations"][0]["id"]
-                    org_name = orgs_data["organizations"][0]["name"]
-                    
-                    ICP.set_param("eventbrite.org_id", org_id)
-                    ICP.set_param("eventbrite.search_mode", "org")
-                    
-                    now = datetime.now(timezone.utc)
-                    end_dt = now + timedelta(days=60)
-                    events = self._fetch_org_events(headers, org_id, start_after=now, end_before=end_dt)
-                    source = f"organization '{org_name}'"
-                else:
-                    raise Exception("No organizations found")
-                    
-            except Exception:
-                # Fall back to getting events from popular organizations
-                _logger.info("No organizations found, trying popular organizations")
-                ICP.set_param("eventbrite.search_mode", "org")
-                
-                now = datetime.now(timezone.utc)
-                end_dt = now + timedelta(days=60)
-                
-                # Try to get events from popular organizations
-                events = self._get_events_from_popular_orgs(headers, start=now, end=end_dt)
-                source = "popular organizations"
+            if not events:
+                return f"No events found for {location}. Try a different city name."
             
             # Store settings for future use
             ICP.set_param("eventbrite.auto_publish", "1")
@@ -111,11 +76,11 @@ class EventbriteSync(models.TransientModel):
             # Unpublish non-Eventbrite events
             self._unpublish_non_eventbrite_events(False)
             
-            return f"Success! Found {len(events)} events from {source}. Created: {created}, Updated: {updated}, Skipped: {skipped}"
+            return f"Success! Found {len(events)} events from {location} via web scraping. Created: {created}, Updated: {updated}, Skipped: {skipped}"
             
         except Exception as e:
-            _logger.exception("Error in simple fetch")
-            return f"Error: {str(e)}"
+            _logger.exception("Error in web scraping")
+            return f"Error scraping events: {str(e)}"
 
     # -------------- Core Sync --------------
     @api.model

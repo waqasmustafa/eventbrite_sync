@@ -10,9 +10,9 @@
           <div class="row mt16 o_settings_container">
                              <div class="col-12 col-lg-6 mb-3">
                    <label for="eventbrite_api_token" class="me-2">
-                     Eventbrite API Token
+                     Eventbrite API Token (Optional)
                    </label>
-                   <field name="eventbrite_api_token" password="True" placeholder="Enter your Eventbrite API token here"/>
+                   <field name="eventbrite_api_token" password="True" placeholder="Optional - not needed for web scraping"/>
                  </div>
                  <div class="col-12 col-lg-6 mb-3">
                    <label for="eventbrite_location" class="me-2">
@@ -22,18 +22,17 @@
                  </div>
             <div class="col-12 col-lg-4 mb-3">
               <button type="action" class="btn btn-primary"
-                      name="%(ir_actions_server_eventbrite_fetch_events)d"
-                      invisible="not eventbrite_api_token">
+                      name="%(ir_actions_server_eventbrite_fetch_events)d">
                 Fetch Events
               </button>
             </div>
                              <div class="col-12 mb-3">
                    <div class="alert alert-info">
                      <strong>How it works:</strong><br/>
-                     1. Enter your Eventbrite API Token<br/>
-                     2. Enter your city name (e.g., New York, London)<br/>
-                     3. Click "Fetch Events" to get events from that location<br/>
-                     4. Events will appear on your website automatically<br/>
+                     1. Enter your city name (e.g., New York, London)<br/>
+                     2. Click "Fetch Events" to scrape events from Eventbrite website<br/>
+                     3. Events will appear on your website automatically<br/>
+                     4. No API token needed - uses web scraping!<br/>
                      5. Sync runs every 5 hours to keep events updated
                    </div>
                  </div>

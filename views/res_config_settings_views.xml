@@ -17,7 +17,7 @@
             <div class="col-12 col-lg-4 mb-3">
               <button type="action" class="btn btn-primary"
                       name="%(ir_actions_server_eventbrite_fetch_events)d"
-                      attrs="{'invisible': [('eventbrite_api_token','=',False)]}">
+                      invisible="not eventbrite_api_token">
                 Fetch Events
               </button>
             </div>

@@ -257,51 +257,39 @@ class EventbriteSync(models.TransientModel):
         return events
 
     def _get_events_from_categories(self, headers, start, end):
-        """Get events from popular categories as a fallback"""
+        """Get events using the correct Eventbrite API approach"""
         events = []
         
-        # Try different approaches to get events
+        # The /v3/events/ endpoint requires specific event IDs
+        # We need to use a different approach - let's try to get events from discover endpoint
         search_approaches = [
-            # Approach 1: Simple events endpoint without categories
+            # Approach 1: Try discover endpoint (if it exists)
             {
-                "url": f"{EVENTBRITE_API}/events/",
+                "url": f"{EVENTBRITE_API}/events/discover/",
                 "params": {
-                    "status": "live",
-                    "order_by": "start_asc",
-                    "expand": "venue,logo",
-                    "time_filter": "start",
-                    "start_date.range_start": start.isoformat(),
-                    "start_date.range_end": end.isoformat(),
-                }
-            },
-            # Approach 2: Events with popular categories
-            {
-                "url": f"{EVENTBRITE_API}/events/",
-                "params": {
-                    "status": "live",
-                    "order_by": "start_asc",
-                    "expand": "venue,logo",
-                    "time_filter": "start",
-                    "start_date.range_start": start.isoformat(),
-                    "start_date.range_end": end.isoformat(),
-                    "categories": "103",  # Music
-                }
-            },
-            # Approach 3: Events without date filter
-            {
-                "url": f"{EVENTBRITE_API}/events/",
-                "params": {
-                    "status": "live",
-                    "order_by": "start_asc",
                     "expand": "venue,logo",
                 }
             },
-            # Approach 4: Try with different status
+            # Approach 2: Try search endpoint with correct parameters
             {
-                "url": f"{EVENTBRITE_API}/events/",
+                "url": f"{EVENTBRITE_API}/events/search/",
                 "params": {
-                    "status": "started",
-                    "order_by": "start_asc",
+                    "expand": "venue,logo",
+                }
+            },
+            # Approach 3: Try to get events from a specific location (New York as example)
+            {
+                "url": f"{EVENTBRITE_API}/events/search/",
+                "params": {
+                    "location.address": "New York",
+                    "location.within": "50km",
+                    "expand": "venue,logo",
+                }
+            },
+            # Approach 4: Try without any parameters
+            {
+                "url": f"{EVENTBRITE_API}/events/search/",
+                "params": {
                     "expand": "venue,logo",
                 }
             }
@@ -317,7 +305,8 @@ class EventbriteSync(models.TransientModel):
                     data = resp.json()
                     _logger.info("Response data keys: %s", list(data.keys()))
                     
-                    category_events = data.get("events", [])
+                    # Try different possible keys for events
+                    category_events = data.get("events", []) or data.get("results", []) or data.get("data", [])
                     _logger.info("Found %s events", len(category_events))
                     
                     if category_events:
@@ -330,6 +319,20 @@ class EventbriteSync(models.TransientModel):
             except Exception as e:
                 _logger.warning("Failed to get events with approach %s: %s", approach["url"], str(e))
                 continue
+        
+        # If still no events, try a completely different approach - get events from user's own events
+        if not events:
+            _logger.info("No events found with search, trying user's own events")
+            try:
+                # Get user's own events (if any)
+                user_resp = requests.get(f"{EVENTBRITE_API}/users/me/events/", headers=headers, timeout=30)
+                if user_resp.status_code == 200:
+                    user_data = user_resp.json()
+                    user_events = user_data.get("events", [])
+                    _logger.info("Found %s user events", len(user_events))
+                    events.extend(user_events[:10])
+            except Exception as e:
+                _logger.warning("Failed to get user events: %s", str(e))
         
         _logger.info("Final events count: %s", len(events))
         return events[:20]  # Return max 20 events

@@ -259,43 +259,79 @@ class EventbriteSync(models.TransientModel):
     def _get_events_from_categories(self, headers, start, end):
         """Get events from popular categories as a fallback"""
         events = []
-        popular_categories = [
-            "103",  # Music
-            "104",  # Food & Drink
-            "105",  # Health
-            "106",  # Business
-            "107",  # Arts
-            "108",  # Film & Media
-            "109",  # Sports & Fitness
-            "110",  # Travel & Outdoor
-        ]
         
-        for category_id in popular_categories:
-            try:
-                url = f"{EVENTBRITE_API}/events/"
-                params = {
+        # Try different approaches to get events
+        search_approaches = [
+            # Approach 1: Simple events endpoint without categories
+            {
+                "url": f"{EVENTBRITE_API}/events/",
+                "params": {
                     "status": "live",
                     "order_by": "start_asc",
                     "expand": "venue,logo",
                     "time_filter": "start",
                     "start_date.range_start": start.isoformat(),
                     "start_date.range_end": end.isoformat(),
-                    "categories": category_id,
                 }
+            },
+            # Approach 2: Events with popular categories
+            {
+                "url": f"{EVENTBRITE_API}/events/",
+                "params": {
+                    "status": "live",
+                    "order_by": "start_asc",
+                    "expand": "venue,logo",
+                    "time_filter": "start",
+                    "start_date.range_start": start.isoformat(),
+                    "start_date.range_end": end.isoformat(),
+                    "categories": "103",  # Music
+                }
+            },
+            # Approach 3: Events without date filter
+            {
+                "url": f"{EVENTBRITE_API}/events/",
+                "params": {
+                    "status": "live",
+                    "order_by": "start_asc",
+                    "expand": "venue,logo",
+                }
+            },
+            # Approach 4: Try with different status
+            {
+                "url": f"{EVENTBRITE_API}/events/",
+                "params": {
+                    "status": "started",
+                    "order_by": "start_asc",
+                    "expand": "venue,logo",
+                }
+            }
+        ]
+        
+        for approach in search_approaches:
+            try:
+                _logger.info("Trying approach: %s with params: %s", approach["url"], approach["params"])
+                resp = requests.get(approach["url"], headers=headers, params=approach["params"], timeout=30)
                 
-                resp = requests.get(url, headers=headers, params=params, timeout=30)
+                _logger.info("Response status: %s", resp.status_code)
                 if resp.status_code == 200:
                     data = resp.json()
-                    category_events = data.get("events", [])
-                    events.extend(category_events[:5])  # Limit to 5 events per category
+                    _logger.info("Response data keys: %s", list(data.keys()))
                     
-                    if len(events) >= 20:  # Limit total events
-                        break
-                        
+                    category_events = data.get("events", [])
+                    _logger.info("Found %s events", len(category_events))
+                    
+                    if category_events:
+                        events.extend(category_events[:10])  # Take first 10 events
+                        _logger.info("Total events collected so far: %s", len(events))
+                        break  # Stop after finding events
+                else:
+                    _logger.warning("API returned status %s: %s", resp.status_code, resp.text)
+                    
             except Exception as e:
-                _logger.warning("Failed to get events for category %s: %s", category_id, str(e))
+                _logger.warning("Failed to get events with approach %s: %s", approach["url"], str(e))
                 continue
         
+        _logger.info("Final events count: %s", len(events))
         return events[:20]  # Return max 20 events
 
     # -------------- UPSERT (Minimal fields only) --------------

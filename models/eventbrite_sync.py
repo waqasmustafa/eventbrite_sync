@@ -101,7 +101,7 @@ class EventbriteSync(models.TransientModel):
             
         except Exception as e:
             _logger.exception("Error in simple fetch")
-+            return f"Error: {str(e)}"
+            return f"Error: {str(e)}"
 
     # -------------- Core Sync --------------
     @api.model

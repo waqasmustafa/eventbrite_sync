@@ -4,7 +4,7 @@
     "version": "18.0.1.0.0",
     "summary": "Sync Eventbrite events every 5 hours, show only Image/Location/Time/+External Link on website",
     "category": "Website/Events",
-    "author": "Your Company",
+    "author": "Waqas Mustafa",
     "license": "LGPL-3",
     "depends": ["event", "website_event"],
     "data": [

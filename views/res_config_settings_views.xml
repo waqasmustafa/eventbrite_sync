@@ -15,9 +15,6 @@
               <field name="eventbrite_api_token" password="True" placeholder="Enter your Eventbrite API token here"/>
             </div>
             <div class="col-12 col-lg-4 mb-3">
-              <label class="me-2">
-                &nbsp;
-              </label>
               <button type="action" class="btn btn-primary"
                       name="%(ir_actions_server_eventbrite_fetch_events)d"
                       attrs="{'invisible': [('eventbrite_api_token','=',False)]}">

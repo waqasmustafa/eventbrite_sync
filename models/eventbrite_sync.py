@@ -420,84 +420,102 @@ class EventbriteSync(models.TransientModel):
             # Parse the HTML to find event data
             html_content = resp.text
             
-            # Look for JSON data in script tags (Eventbrite loads events via JavaScript)
-            json_pattern = r'window\.__SERVER_DATA__\s*=\s*({.*?});'
-            matches = re.findall(json_pattern, html_content, re.DOTALL)
+            # Look for multiple JSON patterns that Eventbrite might use
+            json_patterns = [
+                r'window\.__SERVER_DATA__\s*=\s*({.*?});',
+                r'window\.__INITIAL_STATE__\s*=\s*({.*?});',
+                r'window\.__APOLLO_STATE__\s*=\s*({.*?});',
+                r'window\.__NEXT_DATA__\s*=\s*({.*?});',
+                r'"events":\s*(\[.*?\])',
+                r'"eventList":\s*(\[.*?\])',
+            ]
             
-            if matches:
-                try:
-                    import json
-                    server_data = json.loads(matches[0])
-                    
-                    # Navigate through the JSON structure to find events
-                    if 'bootstrap_data' in server_data:
-                        bootstrap = server_data['bootstrap_data']
-                        if 'events' in bootstrap:
-                            raw_events = bootstrap['events']
-                            
-                            # Convert Eventbrite website format to API format
-                            for event_data in raw_events[:10]:  # Limit to 10 events
-                                try:
-                                    # Extract event information
-                                    event_id = event_data.get('id', f"scraped_{len(events)}")
-                                    event_name = event_data.get('name', {}).get('text', 'Event')
-                                    
-                                    # Get start/end times
-                                    start_time = event_data.get('start', {})
-                                    end_time = event_data.get('end', {})
-                                    
-                                    # Get venue information
-                                    venue_data = event_data.get('venue', {})
-                                    venue_name = venue_data.get('name', 'Venue')
-                                    venue_address = venue_data.get('address', {})
-                                    
-                                    # Get event URL
-                                    event_url = event_data.get('url', f"https://www.eventbrite.com/e/{event_id}")
-                                    
-                                    # Get logo/image
-                                    logo_data = event_data.get('logo', {})
-                                    logo_url = logo_data.get('url', '')
-                                    
-                                    # Create event in API format
-                                    formatted_event = {
-                                        "id": event_id,
-                                        "name": {"text": event_name},
-                                        "start": start_time,
-                                        "end": end_time,
-                                        "status": "live",
-                                        "url": event_url,
-                                        "venue": {
-                                            "name": venue_name,
-                                            "address": venue_address
-                                        },
-                                        "logo": {"url": logo_url} if logo_url else {}
-                                    }
-                                    
-                                    events.append(formatted_event)
-                                    _logger.info("Scraped event: %s", event_name)
-                                    
-                                except Exception as e:
-                                    _logger.warning("Failed to parse scraped event: %s", str(e))
-                                    continue
-                    
-                except json.JSONDecodeError as e:
-                    _logger.warning("Failed to parse JSON from website: %s", str(e))
+            json_data_found = False
+            for pattern in json_patterns:
+                matches = re.findall(pattern, html_content, re.DOTALL)
+                if matches:
+                    _logger.info("Found JSON data with pattern: %s", pattern)
+                    try:
+                        import json
+                        for match in matches:
+                            try:
+                                data = json.loads(match)
+                                events_found = self._extract_events_from_json(data, location)
+                                events.extend(events_found)
+                                if events_found:
+                                    json_data_found = True
+                                    _logger.info("Extracted %s events from JSON", len(events_found))
+                            except json.JSONDecodeError:
+                                continue
+                        if json_data_found:
+                            break
+                    except Exception as e:
+                        _logger.warning("Failed to parse JSON: %s", str(e))
+                        continue
+            
+            if not json_data_found:
+                _logger.info("No JSON data found with any pattern")
             
             # If no JSON data found, try to extract event links from HTML
             if not events:
                 _logger.info("No JSON data found, trying to extract event links from HTML")
-                event_link_pattern = r'href="(/e/[^/]+/[^"]+)"'
-                event_links = re.findall(event_link_pattern, html_content)
                 
-                for i, link in enumerate(event_links[:5]):  # Limit to 5 events
+                # Multiple patterns to find event links
+                event_link_patterns = [
+                    r'href="(/e/[^/]+/[^"]+)"',
+                    r'href="(https://www\.eventbrite\.com/e/[^"]+)"',
+                    r'data-href="(/e/[^"]+)"',
+                    r'data-url="(/e/[^"]+)"',
+                    r'url":"(/e/[^"]+)"',
+                ]
+                
+                all_links = set()
+                for pattern in event_link_patterns:
+                    links = re.findall(pattern, html_content)
+                    all_links.update(links)
+                
+                _logger.info("Found %s unique event links in HTML", len(all_links))
+                
+                for i, link in enumerate(list(all_links)[:10]):  # Limit to 10 events
                     try:
-                        event_url = f"https://www.eventbrite.com{link}"
+                        # Normalize the URL
+                        if link.startswith('/'):
+                            event_url = f"https://www.eventbrite.com{link}"
+                        else:
+                            event_url = link
+                        
                         event_id = f"scraped_link_{i}"
+                        
+                        # Try to extract event name from the URL or surrounding HTML
+                        event_name = f"Event in {location}"
+                        
+                        # Look for event name in the HTML around this link
+                        link_pattern = re.escape(link)
+                        context_pattern = f'.{{0,200}}{link_pattern}.{{0,200}}'
+                        context_matches = re.findall(context_pattern, html_content, re.IGNORECASE)
+                        
+                        for context in context_matches:
+                            # Try to find title or name in the context
+                            title_patterns = [
+                                r'<h[1-6][^>]*>([^<]+)</h[1-6]>',
+                                r'title="([^"]+)"',
+                                r'alt="([^"]+)"',
+                                r'data-title="([^"]+)"',
+                            ]
+                            
+                            for title_pattern in title_patterns:
+                                title_matches = re.findall(title_pattern, context, re.IGNORECASE)
+                                if title_matches:
+                                    event_name = title_matches[0].strip()
+                                    break
+                            
+                            if event_name != f"Event in {location}":
+                                break
                         
                         # Create a basic event structure
                         formatted_event = {
                             "id": event_id,
-                            "name": {"text": f"Event in {location}"},
+                            "name": {"text": event_name},
                             "start": {"local": "2025-09-15T19:00:00", "timezone": "America/New_York"},
                             "end": {"local": "2025-09-15T22:00:00", "timezone": "America/New_York"},
                             "status": "live",
@@ -507,7 +525,7 @@ class EventbriteSync(models.TransientModel):
                         }
                         
                         events.append(formatted_event)
-                        _logger.info("Created event from link: %s", event_url)
+                        _logger.info("Created event from link: %s - %s", event_name, event_url)
                         
                     except Exception as e:
                         _logger.warning("Failed to create event from link: %s", str(e))
@@ -517,6 +535,106 @@ class EventbriteSync(models.TransientModel):
             _logger.warning("Failed to scrape events from website: %s", str(e))
         
         _logger.info("Scraped %s events from Eventbrite website", len(events))
+        return events
+
+    def _extract_events_from_json(self, data, location):
+        """
+        Extract events from various JSON structures that Eventbrite might use.
+        """
+        events = []
+        
+        def find_events_recursive(obj, path=""):
+            """Recursively search for event data in JSON structure"""
+            if isinstance(obj, dict):
+                # Look for common event keys
+                if 'events' in obj and isinstance(obj['events'], list):
+                    _logger.info("Found events array at path: %s", path)
+                    return obj['events']
+                elif 'eventList' in obj and isinstance(obj['eventList'], list):
+                    _logger.info("Found eventList array at path: %s", path)
+                    return obj['eventList']
+                elif 'data' in obj and isinstance(obj['data'], list):
+                    _logger.info("Found data array at path: %s", path)
+                    return obj['data']
+                else:
+                    # Recursively search in nested objects
+                    for key, value in obj.items():
+                        result = find_events_recursive(value, f"{path}.{key}")
+                        if result:
+                            return result
+            elif isinstance(obj, list):
+                # Check if this list contains event-like objects
+                for i, item in enumerate(obj):
+                    if isinstance(item, dict):
+                        # Check if this looks like an event
+                        if any(key in item for key in ['name', 'title', 'event_name', 'id']):
+                            _logger.info("Found event-like objects in list at path: %s[%s]", path, i)
+                            return obj
+                        # Recursively search in list items
+                        result = find_events_recursive(item, f"{path}[{i}]")
+                        if result:
+                            return result
+            return None
+        
+        # Try to find events in the JSON structure
+        raw_events = find_events_recursive(data)
+        
+        if raw_events:
+            _logger.info("Processing %s raw events from JSON", len(raw_events))
+            for i, event_data in enumerate(raw_events[:10]):  # Limit to 10 events
+                try:
+                    # Extract event information with multiple possible field names
+                    event_id = (event_data.get('id') or 
+                              event_data.get('event_id') or 
+                              event_data.get('eid') or 
+                              f"scraped_{i}")
+                    
+                    event_name = (event_data.get('name', {}).get('text') if isinstance(event_data.get('name'), dict) else
+                                event_data.get('name') or
+                                event_data.get('title') or
+                                event_data.get('event_name') or
+                                f"Event in {location}")
+                    
+                    # Get start/end times
+                    start_time = event_data.get('start', {})
+                    end_time = event_data.get('end', {})
+                    
+                    # Get venue information
+                    venue_data = event_data.get('venue', {})
+                    venue_name = venue_data.get('name', f"Venue in {location}")
+                    venue_address = venue_data.get('address', {"city": location})
+                    
+                    # Get event URL
+                    event_url = (event_data.get('url') or 
+                               event_data.get('event_url') or 
+                               f"https://www.eventbrite.com/e/{event_id}")
+                    
+                    # Get logo/image
+                    logo_data = event_data.get('logo', {})
+                    logo_url = logo_data.get('url', '') if isinstance(logo_data, dict) else logo_data
+                    
+                    # Create event in API format
+                    formatted_event = {
+                        "id": str(event_id),
+                        "name": {"text": str(event_name)},
+                        "start": start_time if start_time else {"local": "2025-09-15T19:00:00", "timezone": "America/New_York"},
+                        "end": end_time if end_time else {"local": "2025-09-15T22:00:00", "timezone": "America/New_York"},
+                        "status": "live",
+                        "url": str(event_url),
+                        "venue": {
+                            "name": str(venue_name),
+                            "address": venue_address if isinstance(venue_address, dict) else {"city": location}
+                        },
+                        "logo": {"url": str(logo_url)} if logo_url else {}
+                    }
+                    
+                    events.append(formatted_event)
+                    _logger.info("Scraped event: %s", event_name)
+                    
+                except Exception as e:
+                    _logger.warning("Failed to parse scraped event: %s", str(e))
+                    continue
+        
         return events
 
     def _discover_real_venues(self, headers, location):

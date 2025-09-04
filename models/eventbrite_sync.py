@@ -90,7 +90,8 @@ class EventbriteSync(models.TransientModel):
                 
                 now = datetime.now(timezone.utc)
                 end_dt = now + timedelta(days=60)
-                events = self._search_events(headers, "", "100km", start=now, end=end_dt)
+                # Search without location parameters for global search
+                events = self._search_events(headers, None, None, start=now, end=end_dt)
                 source = "global search"
             
             # Store settings for future use
@@ -196,11 +197,14 @@ class EventbriteSync(models.TransientModel):
             "sort_by": "date",
             "page": page,
             "expand": "venue,logo",
-            "location.address": address or "",
-            "location.within": within or "25km",
             "start_date.range_start": start.isoformat(),
             "start_date.range_end": end.isoformat(),
         }
+        # Add location parameters only if address is provided
+        if address:
+            params["location.address"] = address
+            params["location.within"] = within or "25km"
+        
         url = f"{EVENTBRITE_API}/events/search/"
         while True:
             resp = requests.get(url, headers=headers, params=params, timeout=30)

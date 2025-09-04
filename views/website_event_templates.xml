@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-  <!-- Simple website templates for Eventbrite events -->
+  <!-- Simple website templates for NYC events -->
   <!-- These templates will be applied when events have external_url field -->
   
-  <!-- Custom event detail page for Eventbrite events -->
-  <template id="eventbrite_event_detail" name="Eventbrite Event Detail">
+  <!-- Custom event detail page for NYC events -->
+  <template id="nyc_event_detail" name="NYC Event Detail">
     <t t-call="web.layout">
       <t t-set="title" t-value="event.name"/>
       <div class="container mt-4">
@@ -37,7 +37,7 @@
                 </div>
                 <t t-if="event.external_url">
                   <a t-att-href="event.external_url" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
-                    View on Eventbrite
+                    Buy Tickets on Ticketmaster
                   </a>
                 </t>
               </div>
@@ -48,8 +48,8 @@
     </t>
   </template>
 
-  <!-- Custom event listing page for Eventbrite events -->
-  <template id="eventbrite_events_list" name="Eventbrite Events List">
+  <!-- Custom event listing page for NYC events -->
+  <template id="nyc_events_list" name="NYC Events List">
     <t t-call="web.layout">
       <t t-set="title">Events</t>
       <div class="container mt-4">
@@ -80,7 +80,7 @@
                       </div>
                       <t t-if="event.external_url">
                         <a t-att-href="event.external_url" class="btn btn-primary" target="_blank" rel="noopener">
-                          View on Eventbrite
+                          Buy Tickets
                         </a>
                       </t>
                     </div>

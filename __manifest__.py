@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 {
-    "name": "Eventbrite Sync (Minimal Website Display)",
+    "name": "NYC Events Sync",
     "version": "18.0.1.0.0",
-    "summary": "Sync Eventbrite events every 5 hours, show only Image/Location/Time/+External Link on website",
+    "summary": "Automatically import all public events in New York City from Ticketmaster Discovery API",
     "category": "Website/Events",
     "author": "Waqas Mustafa",
     "license": "LGPL-3",

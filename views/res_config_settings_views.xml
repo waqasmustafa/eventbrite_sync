@@ -6,28 +6,29 @@
     <field name="inherit_id" ref="base.res_config_settings_view_form"/>
     <field name="arch" type="xml">
       <xpath expr="//block[@id='user_default_rights']" position="before">
-        <block title="Eventbrite Sync" id="eventbrite_sync_setting_block">
+        <block title="NYC Events Sync" id="nyc_events_sync_setting_block">
           <div class="row mt16 o_settings_container">
             <div class="col-12 col-lg-8 mb-3">
-              <label for="eventbrite_api_token" class="me-2">
-                Eventbrite API Token
+              <label for="ticketmaster_api_key" class="me-2">
+                Ticketmaster API Key
               </label>
-              <field name="eventbrite_api_token" password="True" placeholder="Enter your Eventbrite API token here"/>
+              <field name="ticketmaster_api_key" password="True" placeholder="Enter your Ticketmaster API key here"/>
             </div>
             <div class="col-12 col-lg-4 mb-3">
               <button type="action" class="btn btn-primary"
-                      name="%(ir_actions_server_eventbrite_fetch_events)d"
-                      invisible="not eventbrite_api_token">
-                Fetch Events
+                      name="%(ir_actions_server_nyc_events_fetch_events)d"
+                      invisible="not ticketmaster_api_key">
+                Fetch NYC Events
               </button>
             </div>
             <div class="col-12 mb-3">
               <div class="alert alert-info">
                 <strong>How it works:</strong><br/>
-                1. Enter your Eventbrite API Token<br/>
-                2. Click "Fetch Events" to get all your events<br/>
+                1. Enter your Ticketmaster API Key<br/>
+                2. Click "Fetch NYC Events" to get all NYC events<br/>
                 3. Events will appear on your website automatically<br/>
-                4. Sync runs every 5 hours to keep events updated
+                4. Sync runs every 5 hours to keep events updated<br/>
+                5. Includes all categories: Music, Sports, Arts, Theatre, etc.
               </div>
             </div>
           </div>

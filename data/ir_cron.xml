@@ -8,7 +8,6 @@
             <field name="code">model.cron_sync_eventbrite()</field>
             <field name="interval_number" eval="5"/>
             <field name="interval_type">hours</field>
-            <field name="numbercall" eval="-1"/>
             <field name="active" eval="True"/>
         </record>
     </data>

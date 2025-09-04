@@ -35,14 +35,6 @@
       </xpath>
     </field>
   </record>
-
-  <!-- Server Action to trigger manual fetch -->
-  <record id="ir_actions_server_eventbrite_fetch_events" model="ir.actions.server">
-    <field name="name">Eventbrite: Fetch Events</field>
-    <field name="model_id" ref="base.model_res_config_settings"/>
-    <field name="state">code</field>
-    <field name="code">action = env['eventbrite.sync'].create({}).action_fetch_all_events()</field>
-  </record>
 </odoo>
 
 

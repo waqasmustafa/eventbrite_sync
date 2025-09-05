@@ -68,8 +68,10 @@ class NYCEventsSync(models.TransientModel):
                     if res == "created": created += 1
                     elif res == "updated": updated += 1
                     else: skipped += 1
-                except Exception:
-                    _logger.exception("Failed to upsert Ticketmaster event %s", event.get("id"))
+                except Exception as e:
+                    _logger.exception("Failed to upsert Ticketmaster event %s: %s", event.get("id"), str(e))
+                    # Rollback the current transaction to prevent cascade failures
+                    self.env.cr.rollback()
                     continue
             
             # Unpublish non-Ticketmaster events
@@ -105,8 +107,10 @@ class NYCEventsSync(models.TransientModel):
                     if res == "created": created += 1
                     elif res == "updated": updated += 1
                     else: skipped += 1
-                except Exception:
-                    _logger.exception("Failed to upsert Ticketmaster event %s", event.get("id"))
+                except Exception as e:
+                    _logger.exception("Failed to upsert Ticketmaster event %s: %s", event.get("id"), str(e))
+                    # Rollback the current transaction to prevent cascade failures
+                    self.env.cr.rollback()
                     continue
 
             # Optionally unpublish non-Ticketmaster events so only API events show on site
@@ -120,41 +124,28 @@ class NYCEventsSync(models.TransientModel):
 
     # -------------- Ticketmaster Fetchers --------------
     def _fetch_ticketmaster_events(self, api_key):
-        """Fetch all NYC events from Ticketmaster Discovery API"""
+        """Fetch NYC events from Ticketmaster Discovery API (limited to 10 for testing)"""
         events = []
         page = 0
-        size = 200  # Maximum page size
+        size = 10  # Limit to 10 events for testing
         
-        while True:
-            params = {
-                "apikey": api_key,
-                "city": "New York",
-                "countryCode": "US",
-                "size": size,
-                "page": page
-            }
-            
-            url = f"{TICKETMASTER_API}/events.json"
-            resp = requests.get(url, params=params, timeout=30)
-            self._rate_limit_guard(resp)
-            data = resp.json()
-            
-            page_events = data.get("_embedded", {}).get("events", [])
-            events.extend(page_events)
-            
-            # Check if we have more pages
-            page_info = data.get("page", {})
-            if page_info.get("number", 0) >= page_info.get("totalPages", 0) - 1:
-                break
+        params = {
+            "apikey": api_key,
+            "city": "New York",
+            "countryCode": "US",
+            "size": size,
+            "page": page
+        }
+        
+        url = f"{TICKETMASTER_API}/events.json"
+        resp = requests.get(url, params=params, timeout=30)
+        self._rate_limit_guard(resp)
+        data = resp.json()
+        
+        page_events = data.get("_embedded", {}).get("events", [])
+        events.extend(page_events)
                 
-            page += 1
-            
-            # Safety limit to prevent infinite loops
-            if page > 50:  # Max 10,000 events (50 pages * 200 events)
-                _logger.warning("Reached maximum page limit (50), stopping fetch")
-                break
-                
-        _logger.info(f"Fetched {len(events)} events from Ticketmaster")
+        _logger.info(f"Fetched {len(events)} events from Ticketmaster (limited to 10 for testing)")
         return events
 
     # -------------- UPSERT Ticketmaster Events --------------
@@ -173,9 +164,13 @@ class NYCEventsSync(models.TransientModel):
         start_date = dates.get("start", {})
         date_begin_utc = self._parse_ticketmaster_date(start_date.get("dateTime"))
         
-        # End date (optional)
+        # End date (optional) - if no end date, use start date + 2 hours as default
         end_date = dates.get("end", {})
         date_end_utc = self._parse_ticketmaster_date(end_date.get("dateTime"))
+        if not date_end_utc and date_begin_utc:
+            # If no end date provided, set it to start date + 2 hours
+            from datetime import timedelta
+            date_end_utc = date_begin_utc + timedelta(hours=2)
         
         # Status
         status = tm_event.get("dates", {}).get("status", {}).get("code", "onsale")

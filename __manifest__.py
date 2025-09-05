@@ -3,7 +3,7 @@
     "name": "NYC Events Sync",
     "summary": "Automatically import all public events in New York City from Ticketmaster Discovery API",
     "category": "Website/Events",
-    "author": "Waqas Mustafa",
+    "author": "Waqas Mustafa Developer",
     "license": "LGPL-3",
     "depends": ["event", "website_event"],
     "data": [

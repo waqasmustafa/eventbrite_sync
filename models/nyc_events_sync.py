@@ -334,27 +334,11 @@ class NYCEventsSync(models.TransientModel):
                     images = data.get("images", []) or data.get("_embedded", {}).get("images", [])
                     
                     if images:
-                        # Filter out images without proper extensions and get the largest valid one
-                        valid_images = [img for img in images if img.get("url", "").endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))]
-                        
-                        if valid_images:
-                            # Try to get a medium-sized image first (more reliable than largest)
-                            # Look for images around 640-1024 width for better compatibility
-                            medium_images = [img for img in valid_images if 640 <= img.get("width", 0) <= 1024]
-                            
-                            if medium_images:
-                                # Get the best medium-sized image
-                                best_image = max(medium_images, key=lambda x: x.get("width", 0) * x.get("height", 0))
-                            else:
-                                # Fallback to largest if no medium size available
-                                best_image = max(valid_images, key=lambda x: x.get("width", 0) * x.get("height", 0))
-                            
-                            image_url = best_image.get("url")
-                            _logger.info("Found valid image for event %s (%dx%d): %s", 
-                                       event_id, best_image.get("width", 0), best_image.get("height", 0), image_url)
-                            return image_url
-                        else:
-                            _logger.warning("No valid images with extensions found for event %s", event_id)
+                        # Get the largest image (highest resolution)
+                        best_image = max(images, key=lambda x: x.get("width", 0) * x.get("height", 0))
+                        image_url = best_image.get("url")
+                        _logger.info("Found image for event %s: %s", event_id, image_url)
+                        return image_url
                     else:
                         _logger.warning("No images found in response for event %s", event_id)
                         
@@ -372,32 +356,16 @@ class NYCEventsSync(models.TransientModel):
             r = requests.get(url, timeout=30)
             r.raise_for_status()
             
-            # Log response details
-            _logger.info("Response status: %d, Content-Type: %s, Content-Length: %d", 
-                        r.status_code, r.headers.get('content-type', 'unknown'), len(r.content))
-            
             # Check if the response is actually an image
             content_type = r.headers.get('content-type', '').lower()
             if not content_type.startswith('image/'):
                 _logger.warning("URL does not return an image. Content-Type: %s", content_type)
-                # Log first 200 characters of content to see what we're getting
-                _logger.warning("Response content preview: %s", r.content[:200])
                 return
             
             # Check if the content is valid
             if len(r.content) < 100:  # Very small files are likely not valid images
                 _logger.warning("Image content too small (%d bytes), likely invalid", len(r.content))
                 return
-            
-            # Try to validate the image content by checking magic bytes
-            if r.content.startswith(b'\xff\xd8\xff'):  # JPEG
-                _logger.info("Detected JPEG image")
-            elif r.content.startswith(b'\x89PNG'):  # PNG
-                _logger.info("Detected PNG image")
-            elif r.content.startswith(b'GIF8'):  # GIF
-                _logger.info("Detected GIF image")
-            else:
-                _logger.warning("Unknown image format. Magic bytes: %s", r.content[:10])
                 
             event_record.image_1920 = r.content
             _logger.info("Successfully downloaded image (%d bytes)", len(r.content))

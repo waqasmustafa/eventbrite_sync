@@ -11,6 +11,9 @@ Automatically import all public events in New York City from the Ticketmaster Di
 - **Website Integration**: Events appear on standard Odoo Website → Events pages
 - **Rich Event Data**: Includes images, venue information, dates, and external ticket links
 - **Smart Venue Management**: Automatically creates venue partners with full address data
+- **Enhanced Image Handling**: Downloads high-quality event images from Ticketmaster
+- **Robust Error Handling**: Comprehensive error recovery and transaction management
+- **Testing Mode**: Limited to 10 events for safe testing and debugging
 
 ## 📋 Requirements
 
@@ -75,9 +78,11 @@ Each imported event includes:
 ### API Integration
 - **Source**: Ticketmaster Discovery API v2
 - **Endpoint**: `https://app.ticketmaster.com/discovery/v2/events.json`
+- **Images Endpoint**: `https://app.ticketmaster.com/discovery/v2/events/{id}/images`
 - **Filters**: `city=New York, countryCode=US`
 - **Rate Limits**: 5 requests/second, 5,000/day
 - **Pagination**: Handles API pagination automatically
+- **Testing Mode**: Limited to 10 events for safe testing
 
 ### Data Mapping
 | Ticketmaster Field | Odoo Field | Description |
@@ -88,8 +93,9 @@ Each imported event includes:
 | `url` | `external_url` | Ticketmaster ticket link |
 | `venues[0].name` | `venue_name` | Venue name |
 | `classifications` | `event_category` | Event category |
-| `images[0].url` | `image_1920` | Event image |
+| `images[0].url` | `image_1920` | Event image (high-res) |
 | `id` | `ticketmaster_id` | Unique identifier |
+| `status` | `ticketmaster_status` | Event status (onsale, cancelled, etc.) |
 
 ### Database Schema
 The module extends `event.event` with additional fields:
@@ -99,6 +105,7 @@ The module extends `event.event` with additional fields:
 - `event_category`: Event category from Ticketmaster
 - `venue_name`: Venue name
 - `last_synced_at`: Last sync timestamp
+- `image_1920`: High-resolution event image from Ticketmaster
 
 ## 📁 File Structure
 
@@ -125,17 +132,38 @@ nyc_events_sync/
 
 ### Automatic Sync (Every 5 Hours)
 1. **Cron Job** triggers `cron_sync_nyc_events()`
-2. **API Call** fetches events from Ticketmaster
+2. **API Call** fetches events from Ticketmaster (limited to 10 for testing)
 3. **Data Processing** maps Ticketmaster data to Odoo format
-4. **Database Update** creates/updates event records
-5. **Venue Management** creates venue partners
-6. **Image Download** fetches and stores event images
+4. **Database Update** creates/updates event records with transaction rollback
+5. **Venue Management** creates venue partners with full address data
+6. **Image Download** fetches high-quality images from dedicated API endpoint
 7. **Publishing** auto-publishes events to website
 
 ### Manual Sync
 1. **User Action** clicks "Fetch NYC Events" button
 2. **Same Process** as automatic sync
 3. **User Notification** shows success message with counts
+
+## ✨ Recent Improvements (v1.1)
+
+### Enhanced Image Handling
+- **Dedicated Images API**: Uses Ticketmaster's dedicated images endpoint
+- **Content Validation**: Validates image content-type and file size
+- **Fallback Mechanism**: Falls back to main event data if images endpoint fails
+- **High-Quality Images**: Downloads the largest available image resolution
+- **Better Error Handling**: Detailed logging for image download issues
+
+### Robust Error Recovery
+- **Transaction Rollback**: Individual event failures don't break entire sync
+- **Enhanced Logging**: Detailed logs for debugging API and database issues
+- **Safe Pagination**: Respects Ticketmaster's pagination limits
+- **Date Handling**: Automatic end date generation for events without end times
+
+### Testing & Debugging
+- **Testing Mode**: Limited to 10 events for safe testing
+- **Comprehensive Logging**: Detailed logs for all operations
+- **Error Recovery**: Graceful handling of API and database errors
+- **Content Validation**: Validates all downloaded content
 
 ## 🛠️ Troubleshooting
 
@@ -163,7 +191,13 @@ Error: null value in column "date_end"
 ```
 Error: DIS1035 - Max paging depth exceeded
 ```
-**Solution**: Module now uses safe pagination limits
+**Solution**: Module now uses safe pagination limits (page * size < 1000)
+
+#### 5. Image Download Error
+```
+Error: This file could not be decoded as an image file
+```
+**Solution**: Enhanced image validation with content-type checking and fallback mechanisms
 
 ### Debug Mode
 Check Odoo logs for detailed error information:
@@ -201,6 +235,8 @@ tail -f /var/log/odoo/odoo-server.log
 ### Log Messages
 ```
 INFO: Fetched 10 events from Ticketmaster (limited to 10 for testing)
+INFO: Found image for event K8vZ917Gku7: https://s1.ticketm.net/dam/a/...
+INFO: Successfully downloaded image (45678 bytes)
 INFO: NYC Events Sync: created=8 updated=2 skipped=0 total=10
 ```
 
@@ -211,6 +247,9 @@ INFO: NYC Events Sync: created=8 updated=2 skipped=0 total=10
 - [ ] Custom sync schedules
 - [ ] Event analytics dashboard
 - [ ] Multi-language support
+- [ ] Remove testing limit (fetch all events)
+- [ ] Image optimization and caching
+- [ ] Event popularity tracking
 
 ## 📞 Support
 

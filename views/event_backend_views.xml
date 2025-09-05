@@ -15,6 +15,7 @@
             <field name="venue_name" readonly="1"/>
             <field name="external_url"/>
             <field name="last_synced_at" readonly="1"/>
+            <field name="image_1920" readonly="1"/>
           </group>
         </page>
       </xpath>

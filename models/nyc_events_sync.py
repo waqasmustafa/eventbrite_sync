@@ -23,6 +23,7 @@ class EventEvent(models.Model):
     ticketmaster_status = fields.Char()
     event_category = fields.Char(string="Event Category")
     venue_name = fields.Char(string="Venue Name")
+    image_1920 = fields.Image("Image", max_width=1920, max_height=1920)
 
 # --------------------------------
 # Sync service (cron + manual run)
@@ -64,7 +65,7 @@ class NYCEventsSync(models.TransientModel):
             created, updated, skipped = 0, 0, 0
             for event in events:
                 try:
-                    res = self._upsert_ticketmaster_event(event, True, False)  # Auto-publish, no specific website
+                    res = self._upsert_ticketmaster_event(event, True, False, api_key)  # Auto-publish, no specific website
                     if res == "created": created += 1
                     elif res == "updated": updated += 1
                     else: skipped += 1
@@ -103,7 +104,7 @@ class NYCEventsSync(models.TransientModel):
             created, updated, skipped = 0, 0, 0
             for event in events:
                 try:
-                    res = self._upsert_ticketmaster_event(event, auto_publish, website_id)
+                    res = self._upsert_ticketmaster_event(event, auto_publish, website_id, api_key)
                     if res == "created": created += 1
                     elif res == "updated": updated += 1
                     else: skipped += 1
@@ -149,7 +150,7 @@ class NYCEventsSync(models.TransientModel):
         return events
 
     # -------------- UPSERT Ticketmaster Events --------------
-    def _upsert_ticketmaster_event(self, tm_event, auto_publish, website_id):
+    def _upsert_ticketmaster_event(self, tm_event, auto_publish, website_id, api_key):
         Event = self.env["event.event"].sudo()
 
         tm_id = tm_event.get("id")
@@ -192,12 +193,17 @@ class NYCEventsSync(models.TransientModel):
             genre = classification.get("genre", {})
             event_category = f"{segment.get('name', '')} - {genre.get('name', '')}".strip(" -")
         
-        # Images
-        images = tm_event.get("images", [])
-        image_url = None
-        if images:
-            # Get the largest image
-            image_url = max(images, key=lambda x: x.get("width", 0) * x.get("height", 0)).get("url")
+        # Images - try dedicated images endpoint first, then fallback to main event data
+        image_url = self._get_event_image_url(api_key, tm_id)
+        
+        # Fallback: try to get image from main event data if dedicated endpoint fails
+        if not image_url:
+            images = tm_event.get("images", [])
+            if images:
+                # Get the largest image from main event data
+                best_image = max(images, key=lambda x: x.get("width", 0) * x.get("height", 0))
+                image_url = best_image.get("url")
+                _logger.info("Using fallback image from main event data: %s", image_url)
 
         existing = Event.search([("ticketmaster_id", "=", tm_id)], limit=1)
 
@@ -306,13 +312,97 @@ class NYCEventsSync(models.TransientModel):
         s = State.search([("code", "=", code.upper())], limit=1)
         return s.id or False
 
+    def _get_event_image_url(self, api_key, event_id):
+        """Fetch event image URL from Ticketmaster images endpoint"""
+        try:
+            # Try both endpoints - with and without .json extension
+            endpoints = [
+                f"{TICKETMASTER_API}/events/{event_id}/images",
+                f"{TICKETMASTER_API}/events/{event_id}/images.json"
+            ]
+            
+            for url in endpoints:
+                try:
+                    params = {"apikey": api_key}
+                    resp = requests.get(url, params=params, timeout=30)
+                    self._rate_limit_guard(resp)
+                    data = resp.json()
+                    
+                    _logger.info("Images API response for %s: %s", event_id, data)
+                    
+                    # Check different possible response structures
+                    images = data.get("images", []) or data.get("_embedded", {}).get("images", [])
+                    
+                    if images:
+                        # Filter out images without proper extensions and get the largest valid one
+                        valid_images = [img for img in images if img.get("url", "").endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))]
+                        
+                        if valid_images:
+                            # Try to get a medium-sized image first (more reliable than largest)
+                            # Look for images around 640-1024 width for better compatibility
+                            medium_images = [img for img in valid_images if 640 <= img.get("width", 0) <= 1024]
+                            
+                            if medium_images:
+                                # Get the best medium-sized image
+                                best_image = max(medium_images, key=lambda x: x.get("width", 0) * x.get("height", 0))
+                            else:
+                                # Fallback to largest if no medium size available
+                                best_image = max(valid_images, key=lambda x: x.get("width", 0) * x.get("height", 0))
+                            
+                            image_url = best_image.get("url")
+                            _logger.info("Found valid image for event %s (%dx%d): %s", 
+                                       event_id, best_image.get("width", 0), best_image.get("height", 0), image_url)
+                            return image_url
+                        else:
+                            _logger.warning("No valid images with extensions found for event %s", event_id)
+                    else:
+                        _logger.warning("No images found in response for event %s", event_id)
+                        
+                except Exception as e:
+                    _logger.warning("Failed to fetch from %s: %s", url, str(e))
+                    continue
+                    
+        except Exception as e:
+            _logger.warning("Failed to fetch event images for %s: %s", event_id, str(e))
+        return None
+
     def _set_event_image(self, event_record, url):
         try:
+            _logger.info("Downloading image from: %s", url)
             r = requests.get(url, timeout=30)
             r.raise_for_status()
+            
+            # Log response details
+            _logger.info("Response status: %d, Content-Type: %s, Content-Length: %d", 
+                        r.status_code, r.headers.get('content-type', 'unknown'), len(r.content))
+            
+            # Check if the response is actually an image
+            content_type = r.headers.get('content-type', '').lower()
+            if not content_type.startswith('image/'):
+                _logger.warning("URL does not return an image. Content-Type: %s", content_type)
+                # Log first 200 characters of content to see what we're getting
+                _logger.warning("Response content preview: %s", r.content[:200])
+                return
+            
+            # Check if the content is valid
+            if len(r.content) < 100:  # Very small files are likely not valid images
+                _logger.warning("Image content too small (%d bytes), likely invalid", len(r.content))
+                return
+            
+            # Try to validate the image content by checking magic bytes
+            if r.content.startswith(b'\xff\xd8\xff'):  # JPEG
+                _logger.info("Detected JPEG image")
+            elif r.content.startswith(b'\x89PNG'):  # PNG
+                _logger.info("Detected PNG image")
+            elif r.content.startswith(b'GIF8'):  # GIF
+                _logger.info("Detected GIF image")
+            else:
+                _logger.warning("Unknown image format. Magic bytes: %s", r.content[:10])
+                
             event_record.image_1920 = r.content
+            _logger.info("Successfully downloaded image (%d bytes)", len(r.content))
         except Exception as e:
-            _logger.warning("Failed to download event image: %s", e)
+            _logger.warning("Failed to download event image from %s: %s", url, e)
 
     def _unpublish_non_ticketmaster_events(self, website_id):
         """Ensure only API-synced events show on website."""
